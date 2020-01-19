@@ -140,30 +140,25 @@ func findTable(d spansql.DDL, t string) (*spansql.CreateTable, error) {
 }
 
 func ConvertType(t spansql.Type) (string, error) {
-	if t.Base == spansql.Bool {
+	switch t.Base {
+	case spansql.Bool:
 		return "BOOL", nil
-	}
-	if t.Base == spansql.Int64 {
+	case spansql.Int64:
 		return "BIGINT", nil
-	}
-	if t.Base == spansql.Float64 {
+	case spansql.Float64:
 		return "FLOAT", nil
-	}
-	if t.Base == spansql.String {
+	case spansql.String:
 		l := big.NewInt(t.Len)
 		bytes := new(big.Int).Mul(l, UnicodeMaxByte)
 		if bytes.Cmp(MysqlVarcharMaxByte) > 0 {
 			return "TEXT", nil
 		}
 		return fmt.Sprintf("VARCHAR(%d)", t.Len), nil
-	}
-	if t.Base == spansql.Bytes {
+	case spansql.Bytes:
 		return "BLOB", nil
-	}
-	if t.Base == spansql.Date {
+	case spansql.Date:
 		return "DATE", nil
-	}
-	if t.Base == spansql.Timestamp {
+	case spansql.Timestamp:
 		return "DATETIME", nil
 	}
 	return "", xerrors.New(fmt.Sprintf("do not support %T", t.Base))
