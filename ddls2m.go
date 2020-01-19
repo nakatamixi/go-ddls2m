@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/spanner/spansql"
 	"github.com/knocknote/vitess-sqlparser/sqlparser"
+	"golang.org/x/xerrors"
 )
 
 var (
@@ -14,41 +15,49 @@ var (
 	MysqlVarcharMaxByte = big.NewInt(65535)
 )
 
-func Convert(sqls string, debug bool) {
+func Convert(sqls string) (string, error) {
 	// spansql not allow backquote
 	sqls = strings.Replace(sqls, "`", "", -1)
 	d, err := spansql.ParseDDL(sqls)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
+	mysqlDDL := ""
 	for _, v := range d.List {
-		fmt.Println(ConvertStmt(d, v) + ";")
+		stmt, err := ConvertStmt(d, v)
+		if err != nil {
+			return "", err
+		}
+		mysqlDDL = mysqlDDL + stmt + ";\n"
 	}
+	return mysqlDDL, nil
 }
 
-func ConvertStmt(d spansql.DDL, s spansql.DDLStmt) string {
+func ConvertStmt(d spansql.DDL, s spansql.DDLStmt) (string, error) {
 	switch v := s.(type) {
 	case spansql.CreateTable:
 		return ConvertTable(d, v)
 	case spansql.CreateIndex:
-		return ConvertIndex(v)
+		return ConvertIndex(v), nil
 	default:
-		panic(fmt.Sprintf("donot support %T", v))
+		return "", xerrors.New(fmt.Sprintf("donot support %T", v))
 	}
-	return ""
 }
 
-func ConvertTable(d spansql.DDL, t spansql.CreateTable) string {
-	stmt := convertFromCreateTableStmt(d, t)
+func ConvertTable(d spansql.DDL, t spansql.CreateTable) (string, error) {
+	stmt, err := convertFromCreateTableStmt(d, t)
+	if err != nil {
+		return "", err
+	}
 	tbuf := sqlparser.NewTrackedBuffer(func(buf *sqlparser.TrackedBuffer, node sqlparser.SQLNode) {})
 	stmt.Format(tbuf)
-	return string(tbuf.Buffer.String())
+	return string(tbuf.Buffer.String()), nil
 }
 func ConvertIndex(i spansql.CreateIndex) string {
 	return i.SQL()
 }
 
-func convertFromCreateTableStmt(d spansql.DDL, t spansql.CreateTable) sqlparser.Statement {
+func convertFromCreateTableStmt(d spansql.DDL, t spansql.CreateTable) (sqlparser.Statement, error) {
 	columns := []*sqlparser.ColumnDef{}
 	for _, col := range t.Columns {
 		options := []*sqlparser.ColumnOption{}
@@ -57,9 +66,13 @@ func convertFromCreateTableStmt(d spansql.DDL, t spansql.CreateTable) sqlparser.
 				Type: sqlparser.ColumnOptionNotNull,
 			})
 		}
+		colType, err := ConvertType(col.Type)
+		if err != nil {
+			return nil, err
+		}
 		columns = append(columns, &sqlparser.ColumnDef{
 			Name:    col.Name,
-			Type:    ConvertType(col.Type),
+			Type:    colType,
 			Options: options,
 		})
 	}
@@ -75,7 +88,10 @@ func convertFromCreateTableStmt(d spansql.DDL, t spansql.CreateTable) sqlparser.
 		})
 	}
 	if t.Interleave != nil {
-		parent := findTable(d, t.Interleave.Parent)
+		parent, err := findTable(d, t.Interleave.Parent)
+		if err != nil {
+			return nil, err
+		}
 		keys := []sqlparser.ColIdent{}
 		if len(parent.PrimaryKey) > 0 {
 			for _, pkey := range parent.PrimaryKey {
@@ -110,47 +126,45 @@ func convertFromCreateTableStmt(d spansql.DDL, t spansql.CreateTable) sqlparser.
 				StrValue: "utf8mb4",
 			},
 		},
-	}
+	}, nil
 }
-func findTable(d spansql.DDL, t string) *spansql.CreateTable {
+func findTable(d spansql.DDL, t string) (*spansql.CreateTable, error) {
 	for _, v := range d.List {
 		if c, ok := v.(spansql.CreateTable); ok {
 			if t == c.Name {
-				return &c
+				return &c, nil
 			}
 		}
 	}
-	panic(fmt.Sprintf("cant find table %s", t))
-	return nil
+	return nil, xerrors.New(fmt.Sprintf("cant find table %s", t))
 }
 
-func ConvertType(t spansql.Type) string {
+func ConvertType(t spansql.Type) (string, error) {
 	if t.Base == spansql.Bool {
-		return "BOOL"
+		return "BOOL", nil
 	}
 	if t.Base == spansql.Int64 {
-		return "BIGINT"
+		return "BIGINT", nil
 	}
 	if t.Base == spansql.Float64 {
-		return "FLOAT"
+		return "FLOAT", nil
 	}
 	if t.Base == spansql.String {
 		l := big.NewInt(t.Len)
 		bytes := new(big.Int).Mul(l, UnicodeMaxByte)
 		if bytes.Cmp(MysqlVarcharMaxByte) > 0 {
-			return "TEXT"
+			return "TEXT", nil
 		}
-		return fmt.Sprintf("VARCHAR(%d)", t.Len)
+		return fmt.Sprintf("VARCHAR(%d)", t.Len), nil
 	}
 	if t.Base == spansql.Bytes {
-		return "BLOB"
+		return "BLOB", nil
 	}
 	if t.Base == spansql.Date {
-		return "DATE"
+		return "DATE", nil
 	}
 	if t.Base == spansql.Timestamp {
-		return "DATETIME"
+		return "DATETIME", nil
 	}
-	panic(fmt.Sprintf("do not support %T", t.Base))
-	return ""
+	return "", xerrors.New(fmt.Sprintf("do not support %T", t.Base))
 }

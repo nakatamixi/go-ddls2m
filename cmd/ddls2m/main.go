@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -10,12 +11,10 @@ import (
 
 func main() {
 	var (
-		file  string
-		debug bool
+		file string
 	)
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.StringVar(&file, "s", "", "spanner schema file")
-	flags.BoolVar(&debug, "d", false, "debug print")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		flags.Usage()
 		return
@@ -28,7 +27,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ddls2m.Convert(body, debug)
+	mbody, err := ddls2m.Convert(body)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(mbody)
 }
 func read(file string) (string, error) {
 	data, err := ioutil.ReadFile(file)
