@@ -7,6 +7,8 @@ go run cmd/ddls2m/main.go -f spanner_ddl.sql
 
 # convert details
 
+- convert only create table, create index DDL
+  - not support other DDL 
 - convert column type https://cloud.google.com/solutions/migrating-mysql-to-spanner?hl=ja#supported_data_types
 - convert interleave to foreigin key
 - table engine is InnoDB, charset is utf8mb4.
