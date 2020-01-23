@@ -18,5 +18,5 @@ build-linux-amd64:
 build-darwin-amd64:
 	@$(MAKE) build GOOS=darwin GOARCH=amd64
 .PHONY: release
-release:
+release: all
 	ghr -u nakatamixi -t $(shell cat github_token) -replace $(VERSION) $(RELEASE_DIR)
