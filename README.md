@@ -3,7 +3,11 @@ Lazy DDL converter from Cloud Spanner to MySQL for document.
 This is not for production use, just for document.(ie ER diagram input)
 
 # how to run
+with golang runtime
+```
 go run cmd/ddls2m/main.go -f spanner_ddl.sql
+```
+or you can get binary from https://github.com/nakatamixi/go-ddls2m/releases
 
 # convert details
 
