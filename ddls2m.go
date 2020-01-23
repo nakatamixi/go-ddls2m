@@ -15,7 +15,7 @@ var (
 	MysqlVarcharMaxByte = big.NewInt(65535)
 )
 
-func Convert(sqls string) (string, error) {
+func Convert(sqls string, withIndex bool) (string, error) {
 	// spansql not allow backquote
 	sqls = strings.Replace(sqls, "`", "", -1)
 	d, err := spansql.ParseDDL(sqls)
@@ -23,25 +23,25 @@ func Convert(sqls string) (string, error) {
 		return "", err
 	}
 	mysqlDDL := ""
-	for _, v := range d.List {
-		stmt, err := ConvertStmt(d, v)
-		if err != nil {
-			return "", err
+	for _, e := range d.List {
+		stmt := ""
+		switch v := e.(type) {
+		case spansql.CreateTable:
+			stmt, err = ConvertTable(d, v)
+			if err != nil {
+				return "", err
+			}
+		case spansql.CreateIndex:
+			if !withIndex {
+				continue
+			}
+			stmt = ConvertIndex(v)
+		default:
+			return "", xerrors.New(fmt.Sprintf("donot support %T", v))
 		}
 		mysqlDDL = mysqlDDL + stmt + ";\n"
 	}
 	return mysqlDDL, nil
-}
-
-func ConvertStmt(d spansql.DDL, s spansql.DDLStmt) (string, error) {
-	switch v := s.(type) {
-	case spansql.CreateTable:
-		return ConvertTable(d, v)
-	case spansql.CreateIndex:
-		return ConvertIndex(v), nil
-	default:
-		return "", xerrors.New(fmt.Sprintf("donot support %T", v))
-	}
 }
 
 func ConvertTable(d spansql.DDL, t spansql.CreateTable) (string, error) {
